@@ -1,5 +1,7 @@
-flask
-flask-cors
-xrpl-py
-requests
-gunicorn
+Flask>=2.3,<3
+flask-cors>=4.0
+flask-jwt-extended>=4.6
+pymongo>=4.6
+xrpl>=2.6
+requests>=2.31
+python-dotenv>=1.0
