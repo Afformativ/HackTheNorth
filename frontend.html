@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XRPL Aid – Minimal Frontend</title>
+  <style>
+    :root { --bg:#0b0d10; --card:#11151a; --muted:#9aa4af; --text:#e5ecf3; --accent:#78c6ff; --ok:#22c55e; --err:#ef4444; }
+    *{box-sizing:border-box} body{margin:0;font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial; color:var(--text); background:var(--bg);} 
+    header{padding:16px 20px;border-bottom:1px solid #1f2937;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    header h1{font-size:16px;margin:0 8px 0 0;opacity:.9}
+    header input[type=text]{width:360px;max-width:100%}
+    .wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;padding:16px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:14px}
+    .card h2{margin:0 0 8px 0;font-size:14px;opacity:.9}
+    label{display:block;margin:8px 0 4px;color:var(--muted)}
+    input,select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2a3441;background:#0e1217;color:var(--text)}
+    button{margin-top:10px;padding:8px 10px;border-radius:10px;border:1px solid #2a3441;background:#0e141a;color:var(--text);cursor:pointer}
+    button:hover{border-color:#344355}
+    .row{display:flex;gap:8px;align-items:center}
+    .row > *{flex:1}
+    small{color:var(--muted)}
+    .ok{color:var(--ok)} .err{color:var(--err)}
+    #log{white-space:pre-wrap;background:#0a0d11;border:1px solid #1f2937;border-radius:12px;padding:12px;min-height:160px}
+    .muted{color:var(--muted)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>XRPL Aid – Minimal Frontend</h1>
+    <label class="muted">Backend URL</label>
+    <input id="base" type="text" value="http://127.0.0.1:5000" />
+    <button id="ping">Ping</button>
+    <small id="pingStatus" class="muted"></small>
+  </header>
+
+  <div class="wrap">
+    <!-- Wallets -->
+    <section class="card">
+      <h2>1) Create Wallet (Testnet faucet auto-funds)</h2>
+      <div class="row">
+        <button id="createWallet">Create Wallet</button>
+        <button id="saveLocal">Save to LocalStorage</button>
+        <button id="loadLocal">Load from LocalStorage</button>
+      </div>
+      <label>Address</label>
+      <input id="addr" class="mono" placeholder="r..." />
+      <label>Secret (seed)</label>
+      <input id="seed" class="mono" placeholder="s... (testnet only)" />
+      <div class="row">
+        <button id="fund">Fund with Test XRP (Faucet)</button>
+        <button id="checkBalances">Check Balances</button>
+      </div>
+      <small>Security note: This demo stores seeds in memory (and optional LocalStorage) for **Testnet** convenience only.</small>
+      <div id="balances" class="muted" style="margin-top:8px"></div>
+    </section>
+
+    <!-- Trustline -->
+    <section class="card">
+      <h2>2) Trustline to RLUSD Issuer</h2>
+      <label>Issuer Address</label>
+      <input id="issuer" class="mono" value="rEBQEFvhgZKEbUMSFcwe5SM7FyEDN26zRL" />
+      <button id="trust">Create Trustline (USD)</button>
+      <small>Trustline uses the Address + Secret above. Limit is 1,000 USD in backend helper.</small>
+    </section>
+
+    <!-- Issue RLUSD (issuer -> user) -->
+    <section class="card">
+      <h2>3) Send RLUSD from Issuer → Address</h2>
+      <label>Destination Address</label>
+      <input id="destIssue" class="mono" placeholder="Recipient r-address (usually same as Address above)" />
+      <label>Amount (USD)</label>
+      <input id="amtIssue" type="number" step="0.000001" value="25" />
+      <button id="sendIssue">Send RLUSD</button>
+      <small>Uses the hard-coded issuer seed on the backend.</small>
+    </section>
+
+    <!-- Transfer RLUSD between users -->
+    <section class="card">
+      <h2>4) Transfer RLUSD (Holder → Another user)</h2>
+      <label>Sender Seed (holder of RLUSD)</label>
+      <input id="seedTransfer" class="mono" placeholder="s..." />
+      <label>Receiver Address (must trust issuer)</label>
+      <input id="destTransfer" class="mono" placeholder="r..." />
+      <label>Amount (USD)</label>
+      <input id="amtTransfer" type="number" step="0.000001" value="5" />
+      <button id="sendTransfer">Transfer RLUSD</button>
+      <small>Both sender and receiver need a trustline to the same issuer.</small>
+    </section>
+
+    <!-- XRP Escrow -->
+    <section class="card">
+      <h2>5) XRP Escrow (time lock)</h2>
+      <label>Sender Address (must be a wallet created via backend so it exists in server memory)</label>
+      <input id="escSender" class="mono" placeholder="r..." />
+      <label>Receiver Address</label>
+      <input id="escRecv" class="mono" placeholder="r..." />
+      <div class="row">
+        <div>
+          <label>Amount (XRP)</label>
+          <input id="escAmt" type="number" step="0.000001" value="10" />
+        </div>
+        <div>
+          <label>Finish After (seconds)</label>
+          <input id="escSecs" type="number" value="60" />
+        </div>
+      </div>
+      <button id="escCreate">Create XRP Escrow</button>
+      <small>Note: IOUs (like RLUSD) cannot use native XRPL escrow. Backend enforces <em>currency = XRP</em>.</small>
+
+      <label style="margin-top:8px">Escrow Sequence (from create response)</label>
+      <input id="escSeq" class="mono" placeholder="e.g. 12345" />
+      <label>Claimer Address (must be known to backend WALLETS)</label>
+      <input id="escClaimer" class="mono" placeholder="r... (same as Receiver above)" />
+      <label>Claimer DID (demo)</label>
+      <input id="escDid" class="mono" placeholder="did:example:0x123..." />
+      <button id="escFinish">Finish (claim)</button>
+    </section>
+
+    <!-- Dev Log -->
+    <section class="card" style="grid-column: 1/-1">
+      <h2>Console</h2>
+      <div id="log" class="mono"></div>
+      <div class="row">
+        <button id="clearLog">Clear Console</button>
+        <button id="copyLog">Copy</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const logEl = $('#log');
+    const ts = () => new Date().toLocaleTimeString();
+    function log(msg, obj){
+      let out = `[${ts()}] ${msg}`;
+      if (obj!==undefined) out += `\n`+ (typeof obj==='string'?obj:JSON.stringify(obj,null,2));
+      logEl.textContent = out + "\n\n" + logEl.textContent;
+    }
+
+    function base(){ return $('#base').value.replace(/\/$/, ''); }
+
+    async function post(path, body){
+      const url = base() + path;
+      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+      const text = await res.text();
+      let json; try{ json = JSON.parse(text); } catch{ json = { raw: text }; }
+      log(`${res.ok? '✅':'❌'} POST ${path}`, json);
+      if(!res.ok) throw new Error(text);
+      return json;
+    }
+
+    // Ping
+    $('#ping').addEventListener('click', async()=>{
+      try{ const r = await fetch(base()+'/'); const t = await r.text(); $('#pingStatus').textContent = r.ok? 'Server OK':'Server error'; log('Ping /', t); }
+      catch(e){ $('#pingStatus').textContent='No response'; log('Ping failed', String(e)); }
+    });
+
+    // Create wallet
+    $('#createWallet').addEventListener('click', async ()=>{
+      const j = await post('/create_wallet');
+      $('#addr').value = j.address || '';
+      $('#seed').value = j.secret || '';
+      $('#destIssue').value = j.address || '';
+      $('#escSender').value = j.address || '';
+      $('#escClaimer').value = j.address || '';
+    });
+
+    // Save / Load local
+    $('#saveLocal').addEventListener('click', ()=>{
+      localStorage.setItem('xrpl_addr', $('#addr').value);
+      localStorage.setItem('xrpl_seed', $('#seed').value);
+      localStorage.setItem('xrpl_issuer', $('#issuer').value);
+      log('Saved to LocalStorage');
+    });
+    $('#loadLocal').addEventListener('click', ()=>{
+      $('#addr').value = localStorage.getItem('xrpl_addr')||'';
+      $('#seed').value = localStorage.getItem('xrpl_seed')||'';
+      $('#issuer').value = localStorage.getItem('xrpl_issuer')||$('#issuer').value;
+      $('#destIssue').value = $('#addr').value;
+      log('Loaded from LocalStorage');
+    });
+
+    // Fund
+    $('#fund').addEventListener('click', async ()=>{
+      const address = $('#addr').value.trim();
+      if(!address) return log('Provide Address first');
+      await post('/fund_wallet', { address });
+    });
+
+    // Check balances
+    $('#checkBalances').addEventListener('click', async ()=>{
+      const wallet_address = $('#addr').value.trim();
+      if(!wallet_address) return log('Provide Address first');
+      const j = await post('/check_balances', { wallet_address });
+      $('#balances').textContent = `XRP: ${j.xrp_balance ?? '?'} | RLUSD: ${j.rlusd_balance ?? '?'}`;
+    });
+
+    // Trustline
+    $('#trust').addEventListener('click', async ()=>{
+      const address = $('#addr').value.trim();
+      const secret  = $('#seed').value.trim();
+      const issuer  = $('#issuer').value.trim();
+      if(!address || !secret || !issuer) return log('Address, Secret, Issuer required');
+      await post('/create_trustline', { address, secret, issuer });
+    });
+
+    // Issue RLUSD (issuer -> destination)
+    $('#sendIssue').addEventListener('click', async ()=>{
+      const destination = $('#destIssue').value.trim();
+      const amount = String($('#amtIssue').value || '0');
+      if(!destination) return log('Destination required');
+      await post('/send_rlusd', { destination, amount });
+      // refresh balances if destination equals our address
+      if(destination === $('#addr').value.trim()) $('#checkBalances').click();
+    });
+
+    // Transfer RLUSD holder -> receiver
+    $('#sendTransfer').addEventListener('click', async ()=>{
+      const sender_seed = $('#seedTransfer').value.trim() || $('#seed').value.trim();
+      const receiver_address = $('#destTransfer').value.trim();
+      const amount = String($('#amtTransfer').value || '0');
+      if(!sender_seed || !receiver_address) return log('Sender seed and receiver address required');
+      await post('/transfer_rlusd', { sender_seed, receiver_address, amount });
+    });
+
+    // Escrow create (XRP)
+    $('#escCreate').addEventListener('click', async ()=>{
+      const sender = $('#escSender').value.trim();
+      const receiver = $('#escRecv').value.trim();
+      const amount = String($('#escAmt').value || '0');
+      const seconds = parseInt($('#escSecs').value || '60', 10);
+      if(!sender || !receiver) return log('Sender and Receiver required');
+      const j = await post('/deposit_escrow', { sender, receiver, amount, currency:'XRP', finish_after_seconds: seconds });
+      if(j.escrow_sequence){ $('#escSeq').value = j.escrow_sequence; }
+    });
+
+    // Escrow finish
+    $('#escFinish').addEventListener('click', async ()=>{
+      const escrow_sequence = $('#escSeq').value.trim();
+      const claimer = $('#escClaimer').value.trim();
+      const did = $('#escDid').value.trim() || 'did:example:0x123456789abcdef';
+      if(!escrow_sequence || !claimer) return log('Sequence and Claimer required');
+      await post('/claim_funds', { escrow_sequence, claimer, did });
+    });
+
+    // Console buttons
+    $('#clearLog').addEventListener('click', ()=>{ logEl.textContent=''; });
+    $('#copyLog').addEventListener('click', async()=>{
+      await navigator.clipboard.writeText(logEl.textContent);
+      log('Console copied to clipboard');
+    });
+
+    // Prefill from LocalStorage on load
+    (function(){
+      const a = localStorage.getItem('xrpl_addr');
+      const s = localStorage.getItem('xrpl_seed');
+      if(a) $('#addr').value = a, $('#destIssue').value = a, $('#escSender').value = a, $('#escClaimer').value = a;
+      if(s) $('#seed').value = s;
+    })();
+  </script>
+</body>
+</html>
